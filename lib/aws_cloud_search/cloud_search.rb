@@ -11,16 +11,30 @@ module AWSCloudSearch
 
     # Sends a batch of document updates and deletes by invoking the CloudSearch documents/batch API
     # @param [DocumentBatch] doc_batch The batch of document adds and deletes to send
+    # @param [retries] The number of times to try posting before raising an exception
     # @return
-    def documents_batch(doc_batch)
+    def documents_batch(doc_batch, retries=3)
       raise ArgumentError.new("Invalid argument. Expected DocumentBatch, got #{doc_batch.class}.") unless doc_batch.is_a? DocumentBatch
 
+      times = 0
+      begin
+        return documents_batch_execute(doc_batch)
+      rescue Exception => e
+        times += 1
+        retry if times < retries
+        raise e
+      end
+    end
+
+    def documents_batch_execute(doc_batch)
       resp = @doc_conn.post do |req|
         req.url "/#{AWSCloudSearch::API_VERSION}/documents/batch"
         req.headers['Content-Type'] = 'application/json'
         req.body = doc_batch.to_json
       end
-      raise(Exception, "AwsCloudSearchCloud::DocumentService batch returned #{resp.body[:errors].size} errors: #{resp.body[:errors].join(';')}") if resp.body[:status] == 'error'
+
+      raise(StandardError, "AwsCloudSearchCloud::DocumentService batch returned #{resp.body[:errors].size} errors: #{resp.body[:errors].join(';')}") if resp.body[:status] == 'error'
+
       resp.body
     end
 
